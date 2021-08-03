@@ -1,2 +1,3 @@
-# UWOC_communication
-communication code for UWOC system
+# OPtical simulation
+structure light simulation 
+1D propagation or 2D profile generation
