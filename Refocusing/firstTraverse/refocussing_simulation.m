@@ -1,3 +1,5 @@
+%%20210804 23:34
+
 %part1: diffuse_simulation
 %part2: iterate to focusing
 
@@ -93,7 +95,7 @@ if ini_flag==1
     E_dis=reshape(E_dis,c,l);
     %继续传播到焦面上聚焦
     ft=inf;
-    [E_out2, Xout2, Yout2] = mFraFFT2D_sp(angle(E_dis), abs(E_dis), ft, z3/2 , z3/2, xin, yin, wavelength, fft_sample);
+    [E_out2, Xout2, Yout2] = mFraFFT2D(angle(E_dis), abs(E_dis), ft, z3/2 , z3/2, xin, yin, wavelength, fft_sample);
     E_out2= interp2 (Xout2,Yout2,E_out2,xin,yin);
     Iout=abs(E_out2).^2;
     
@@ -115,7 +117,7 @@ E_dis=reshape(E_dis,c,l);
 
 %继续传播到焦面上聚焦
 ft=inf;
-[E_out2, Xout2, Yout2] = mFraFFT2D_sp(angle(E_dis), abs(E_dis), ft, z3/2 , z3/2, xin, yin, wavelength, fft_sample);
+[E_out2, Xout2, Yout2] = mFraFFT2D(angle(E_dis), abs(E_dis), ft, z3/2 , z3/2, xin, yin, wavelength, fft_sample);
 E_out2= interp2 (Xout2,Yout2,E_out2,xin,yin);
 Iout=abs(E_out2).^2;
 
