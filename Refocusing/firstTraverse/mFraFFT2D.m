@@ -21,8 +21,14 @@ E_in=m_beam_amp.*exp(1i*(m_phase));
 sampling_size = abs(yin(1) - yin(2));
 
 fH = z1 + z2 - z1*z2/fT; 
-f2 = (z1*z2 - (z1+z2)*fT)/(fT-z1);
-f1 = (z1*z2 - (z1+z2)*fT)/(fT-z2);
+
+if fT==inf
+    f2 = (z1+z2);
+    f1 = (z1+z2);
+else
+    f2 = (z1*z2 - (z1+z2)*fT)/(fT-z1);
+    f1 = (z1*z2 - (z1+z2)*fT)/(fT-z2);
+end
 
 m_tan = max(max(xin))/fH;
 step2 = wavelength*fH/fft_sample/sampling_size;
