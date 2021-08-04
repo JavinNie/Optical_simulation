@@ -36,10 +36,10 @@ fT = inf;
 z1 = 0.5;
 z2= 0.05;
 
-[E_out1, ~, ~] = mFraFFT2D_sp(m_phase, m_beam_amp, fT,z1 , z2, xin, yin, wavelength, fft_sample);
-[E_out_ref, ~, ~] = mFraFFT2D_sp(m_phase*0, m_beam_amp, fT, z1 , z2, xin, yin, wavelength, fft_sample);
+[E_out1, ~, ~] = mFraFFT2D(m_phase, m_beam_amp, fT,z1 , z2, xin, yin, wavelength, fft_sample);
+[E_out_ref, ~, ~] = mFraFFT2D(m_phase*0, m_beam_amp, fT, z1 , z2, xin, yin, wavelength, fft_sample);
 
-[~, Xout, Yout] = mFraFFT2D_sp(0, m_beam_amp,fT,z1 , z2, xin, yin, wavelength, fft_sample);
+[~, Xout, Yout] = mFraFFT2D(0, m_beam_amp,fT,z1 , z2, xin, yin, wavelength, fft_sample);
 
 %强度计算及归一化
 I_out_ref = abs(E_out_ref).^2;
