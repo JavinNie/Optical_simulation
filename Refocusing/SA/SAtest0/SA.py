@@ -3,6 +3,7 @@ import math
 import random
 import xlrd
 from scipy import interpolate
+import numpy as np
 
 """
 函数里面所有以plot开头的函数都可以注释掉，没有影响
@@ -26,18 +27,20 @@ def main():
     # plt.plot(F, Pvalue)
     # plt.show()
 
-    T_init = 1000  # 初始最大温度
-    alpha = 0.9  # 降温系数
-    T_min = 150  # 最小温度，即退出循环条件
+    T_init = 500  # 初始最大温度
+    alpha = 0.75  # 降温系数
+    T_min = 50  # 最小温度，即退出循环条件
     T = T_init
-    step=1400
+    step = 1400
 
-    x = random.random() * len(F)+min(F)  # 初始化x，在0和3000之间v
+    x = random.random() * len(F) + min(F)-1  # 初始化x，在0和3000之间v
 
     # f是一个函数，用这个函数就可以找插值点的函数值了：
     y = func(x)
     results = []  # 存x，y
-
+    dY = []
+    P=[]
+    S=[]
     count = 0
     while T > T_min:
         x_best = x
@@ -45,12 +48,15 @@ def main():
         y_best = y  # 设置成这个收敛太快了，令人智熄
         flag = 0  # 用来标识该温度下是否有新值被接受
         # 每个温度迭代50次，找最优解
-        for i in range(20):
-            delta_x = (random.random() - 0.5)* step  # 自变量进行波动
+        step=step*T/T_init
+        S.append(step)
+        for i in range(15):
+            # delta_x = (random.random() - 0.5)* step  # 自变量进行波动
+            delta_x = np.random.randn() * step
             # 自变量变化后仍要求在[0,10]之间
-            if min(F) < (x + delta_x) < len(F)+min(F):
+            if min(F) < (x + delta_x) < len(F) + min(F):
                 x_new = x + delta_x
-            elif min(F) < (x - delta_x) < len(F)+min(F):
+            elif min(F) < (x - delta_x) < len(F) + min(F):
                 x_new = x - delta_x
             else:
                 x_new = x
@@ -58,6 +64,10 @@ def main():
             y_new = func(x_new)
 
             # 以上为找最大值，要找最小值就把>号变成<
+            if y_new <= y:
+                dY.append(y - y_new)
+                P.append(math.exp(-(y - y_new) / T))
+
             if (y_new > y or math.exp(-(y - y_new) / T) > random.random()):
                 flag = 1  # 有新值被接受
                 x = x_new
@@ -76,22 +86,25 @@ def main():
 
     print('最优解 x:%f,y:%f' % results[-1])
 
-    plot_final_result(results)
+    plt.figure()
+    plt.plot(dY)
+    plt.show()
+
+    plt.figure()
+    plt.plot(P)
+    plt.show()
+
+    plt.figure()
+    plt.plot(S)
+    plt.show()
+
     plot_iter_curve(results)
+    plot_final_result(results)
+
 
     # 显示前关掉交互模式
     plt.ioff()
     plt.show()
-
-# 看看我们要处理的目标函数
-# def plot_obj_func():
-#     plt.figure()
-#     """y = 10 * math.sin(5 * x) + 7 * math.cos(4 * x)"""
-#     X1 = [i / float(10) for i in range(0, 100, 1)]
-#     Y1 = [10 * math.sin(5 * x) + 7 * math.cos(4 * x) for x in X1]
-#     plt.plot(X1, Y1)
-#     plt.show()
-
 
 def plot_final_result(results):
     plt.ion()
@@ -103,11 +116,10 @@ def plot_final_result(results):
     func = interpolate.interp1d(F, Pvalue, 'nearest')
 
     plt.figure()
-
     plt.plot(F, Pvalue)
-
-    plt.scatter(results[-1][0], results[-1][1], c='r', s=10)
+    plt.scatter(results[-1][0], results[-1][1], c='r', s=50)
     plt.show()
+
 
 # 看看最终的迭代变化曲线
 def plot_iter_curve(results):
@@ -117,8 +129,9 @@ def plot_iter_curve(results):
     Y = [results[i][1] for i in range(len(results))]
     plt.plot(X, Y)
     plt.show()
-    plt.ioff()
+    # plt.ioff()
     plt.show()
+
 
 if __name__ == '__main__':
     # for i in range(100):
