@@ -80,8 +80,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # camera setting
         self.Gain_doubleSpinBox.valueChanged.connect(self.cam_Gain_setting)
+        self.Gain_horizontalSlider.valueChanged.connect(self.cam_Gain_setting)
         self.Exposure_spinBox.valueChanged.connect(self.cam_Exposure_setting)
-
+        self.Exposure_horizontalSlider.valueChanged.connect(self.cam_Exposure_setting)
         # camera display
         self.timer_camera.timeout.connect(self.Cam_display)  # 若定时器结束，则调用Cam_display()
 
@@ -163,6 +164,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         # auto mode close
         self.cam.GainAuto.SetValue(PySpin.GainAuto_Off)
         self.cam.ExposureAuto.SetValue(PySpin.ExposureAuto_Off)
+        self.cam_Exposure_setting()
+        self.cam_Gain_setting()
 
         #  Image acquisition must be ended when no more images are needed.
         self.cam.BeginAcquisition()
@@ -295,16 +298,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.SA_for_flen()
 
     def SA_for_flen(self):
+
+        self.Exposure_horizontalSlider.setValue(int(170))
         Iteration = 0  # 迭代计数器
         runtime_start = time.time()  # 运行时间起始点
 
         # SA参数设置
         T_init = 500  # 初始最大温度
-        alpha = 0.75  # 降温系数
+        alpha = 0.7  # 降温系数
         T_min = 50  # 最小温度，即退出循环条件
-        step = 1400  # 随机扰动步长
-        scale_upper = 10000
+        scale_upper = 1000
         scale_lower = 0
+        step = 0.45*scale_upper  # 随机扰动步长
         search_depth = 15  # 搜索深度
         T = T_init  #
 
@@ -321,7 +326,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             x = 500  # 初始位置
             self.update_flens(x)  # 更新flens全息图
             y = self.last_aim_value
-            while T > T_min:
+            while (T > T_min) & (self.auto_flag == 1):
                 x_best = x
                 y_best = y  # 设置成这个收敛太快了，令人智熄
                 flag = 0  # 用来标识该温度下是否有新值被接受
@@ -329,6 +334,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 step = step * T / T_init
                 # 每个温度迭代多次，找最优解
                 for i in range(search_depth):
+                    if self.auto_flag != 1  :
+                        break
                     delta_x = np.random.randn() * step  # 自变量进行扰动
                     # 自变量变化后仍要求在[0,10]之间
                     if scale_lower < (x + delta_x) < scale_upper:
@@ -350,7 +357,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                             x_best = x
                             y_best = y
 
-                    print(str(count)+' '+str(y)+' '+str(y_new))
+                    print(str(count)+' '+str(x_new)+' '+str(y_new))
                     count = count + 1
                     # 写入excel表格
                     Iteration = Iteration + 1
@@ -363,42 +370,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             workbook.save('Lens_Value.xls')
             self.End_clicked()
 
-        #
-        #     # 迭代次数限制自动退出 及 刷新显示
-        #     if Iteration > 3000:
-        #         self.End_clicked()
-        #         break
-        #     Iteration = Iteration + 1
-        #     self.Iteration_lineEdit.setText(str(Iteration))
-        #     # 运行时间计算 及 刷新显示
-        #     runtime = time.time() - runtime_start
-        #     hour = int(runtime // 3600)
-        #     minute = int((runtime - hour * 3600) // 60)
-        #     sec = int((runtime - hour * 3600 - minute * 60))
-        #     self.RunTime_lineEdit.setText(str(hour).zfill(2) + ":" + str(minute).zfill(2) + ":" + str(sec).zfill(2))
-        #
-        #     # 算法部分 计算 Hologram
-        #     f_lens = f_lens + 1
-        #
-        #     output_phase = np.angle(np.exp(1j / f_lens * R ** 2)) + np.pi
-        #     m1 = 0.0205
-        #     m2 = 2.4219
-        #     m_phase = np.arange(0, 256) / 255 * (m2 - m1) + m1
-        #     m_grey = np.arange(0, 256)
-        #     m_bitmap = np.uint8(np.interp(output_phase, m_phase, m_grey))
-        #     # 更新hologram
-        #     self.Hologram = m_bitmap
-        #     # 更新值
-        #     self.update_cam_value()
-        #
-        #     # 写入excel表格
-        #     sheet.write(Iteration, 0, str(f_lens))
-        #     sheet.write(Iteration, 1, str(self.last_aim_value))
-        #
-        #     if self.last_aim_value > self.Max_aim_value:
-        #         self.Max_Hologram = self.Hologram
-        #
-        # workbook.save('Lens_Value.xls')
+
 
     def update_flens(self, f_lens):
         # 图像参数设置
@@ -419,28 +391,34 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.Hologram = m_bitmap
 
         self.update_cam_value()  # 获得最新的值
-
-        # if self.last_aim_value >= 230:
-        #     self.reset_Cam()
+        if self.last_aim_value >= 200:
+            self.reset_Cam()
 
     def reset_Cam(self):
+
         self.update_cam_value()
         EX_value = self.Exposure_spinBox.value()
         # 曝光值的调节左右侧
         left = 0
-        right = EX_value
+        right = 170
         # 目标值的上下边界
-        upper = 170
-        lower = 120
-        while not (lower <= self.last_aim_value <= upper):
+        upper = 150
+        lower = 90
+        # 窗口实施刷新，后台计算不影响界面刷新
+        QtWidgets.QApplication.processEvents()
+        while (not (lower <= self.last_aim_value <= upper)) & (self.auto_flag == 1):
+            if ((self.last_aim_value <= lower)&(EX_value==170))|((self.last_aim_value >= upper)&(EX_value<=1)):
+                break
+
             if self.last_aim_value > upper:
                 EX_value = (left + EX_value) / 2
             elif self.last_aim_value < lower:
                 EX_value = (EX_value + right) / 2
-            self.Exposure_horizontalSlider.setValue(EX_value)
-            self.cam_Exposure_setting()
+            self.Exposure_horizontalSlider.setValue(int(EX_value))
+            # self.cam_Exposure_setting()
             self.update_cam_value()
 
+        #   从大往小调，发现超限了才降低曝光，所以出现这个情况肯定是最大值需要更新了
         self.Max_aim_value = self.last_aim_value
 
     # def update_WF(self):
