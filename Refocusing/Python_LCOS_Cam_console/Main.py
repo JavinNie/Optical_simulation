@@ -27,6 +27,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         # 进入
         # Auto状态标志
         self.auto_flag = 0
+        # 自动更新曝光，之后，要更新所有值
+        self.update_Exposure_flag = 0
 
         # 定时器
         self.timer_camera = QtCore.QTimer()  # 定义定时器，用于控制显示视频的帧率
@@ -298,18 +300,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.SA_for_flen()
 
     def SA_for_flen(self):
-
+        # 配合自动曝光，先设定一个高值
         self.Exposure_horizontalSlider.setValue(int(170))
         Iteration = 0  # 迭代计数器
         runtime_start = time.time()  # 运行时间起始点
 
         # SA参数设置
         T_init = 500  # 初始最大温度
-        alpha = 0.7  # 降温系数
+        alpha = 0.65  # 降温系数
         T_min = 50  # 最小温度，即退出循环条件
         scale_upper = 1000
         scale_lower = 0
-        step = 0.45*scale_upper  # 随机扰动步长
+        step = 0.48 * scale_upper  # 随机扰动步长
         search_depth = 15  # 搜索深度
         T = T_init  #
 
@@ -334,7 +336,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 step = step * T / T_init
                 # 每个温度迭代多次，找最优解
                 for i in range(search_depth):
-                    if self.auto_flag != 1  :
+                    if self.auto_flag != 1:
                         break
                     delta_x = np.random.randn() * step  # 自变量进行扰动
                     # 自变量变化后仍要求在[0,10]之间
@@ -347,6 +349,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
                     self.update_flens(x_new)  # 更新flens全息图
                     y_new = self.last_aim_value
+                    if self.update_Exposure_flag == 1:
+                        self.update_flens(x)  # 更新flens全息图
+                        y = self.last_aim_value
+                        self.update_flens(x_best)  # 更新flens全息图
+                        y_best = self.last_aim_value
+                        self.update_Exposure_flag = 0
 
                     # 以上为找最大值，要找最小值就把>号变成<
                     if (y_new >= y or np.exp(-(y - y_new) / T) > np.random.rand()):
@@ -357,7 +365,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                             x_best = x
                             y_best = y
 
-                    print(str(count)+' '+str(x_new)+' '+str(y_new))
+                    print(str(count) + ' ' + str(x_new) + ' ' + str(y_new))
                     count = count + 1
                     # 写入excel表格
                     Iteration = Iteration + 1
@@ -369,8 +377,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 T *= alpha  # 温度下降
             workbook.save('Lens_Value.xls')
             self.End_clicked()
-
-
 
     def update_flens(self, f_lens):
         # 图像参数设置
@@ -391,31 +397,38 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.Hologram = m_bitmap
 
         self.update_cam_value()  # 获得最新的值
+        # # 自动更新曝光
         if self.last_aim_value >= 200:
             self.reset_Cam()
+            self.update_Exposure_flag = 1
 
     def reset_Cam(self):
 
         self.update_cam_value()
         EX_value = self.Exposure_spinBox.value()
+
         # 曝光值的调节左右侧
         left = 0
         right = 170
         # 目标值的上下边界
         upper = 150
-        lower = 90
+        lower = 110
         # 窗口实施刷新，后台计算不影响界面刷新
         QtWidgets.QApplication.processEvents()
         while (not (lower <= self.last_aim_value <= upper)) & (self.auto_flag == 1):
-            if ((self.last_aim_value <= lower)&(EX_value==170))|((self.last_aim_value >= upper)&(EX_value<=1)):
+            if ((self.last_aim_value <= lower) & (EX_value == 170)) | (
+                    (self.last_aim_value >= upper) & (EX_value <= 1)):
                 break
 
             if self.last_aim_value > upper:
+                right = EX_value
                 EX_value = (left + EX_value) / 2
+
             elif self.last_aim_value < lower:
+                left = EX_value
                 EX_value = (EX_value + right) / 2
             self.Exposure_horizontalSlider.setValue(int(EX_value))
-            # self.cam_Exposure_setting()
+            self.cam_Exposure_setting()
             self.update_cam_value()
 
         #   从大往小调，发现超限了才降低曝光，所以出现这个情况肯定是最大值需要更新了
