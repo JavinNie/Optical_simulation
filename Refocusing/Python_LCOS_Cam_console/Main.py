@@ -9,6 +9,7 @@ import PySpin
 import cv2
 from Mainwindow import Ui_MainWindow
 import time
+import xlwt
 
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
@@ -46,6 +47,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.position_top = self.Aim_ver_spinBox.value()
         self.scale = self.Aim_Scale_spinBox.value()
         self.last_aim_value = self.cam_image[self.position_top][self.position_left]
+        self.Max_aim_value = -1
 
         # SLM Display
         self.label = QtWidgets.QLabel()  # 创建显示图窗
@@ -55,6 +57,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.Hologram = np.random.randint(254, 255, [200, 200], np.uint8)  # initial
         self.HologramPositionTop = int(self.Top_spinBox.value())
         self.HologramPositionLeft = int(self.Left_spinBox.value())
+
+        self.Max_Hologram = self.Hologram
 
         # Slot bound
         self.Slot_bound()
@@ -91,6 +95,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.Auto_pushButton.clicked.connect(self.Auto_clicked)
         # End
         self.End_pushButton.clicked.connect(self.End_clicked)
+        # Save
+        self.Save_pushButton.clicked.connect(self.Save_clicked)
 
     def SLM_Init(self):
         desktop = QtWidgets.QApplication.desktop()
@@ -286,69 +292,179 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.Auto_model()
 
     def Auto_model(self):
+        self.SA_for_flen()
+
+    def SA_for_flen(self):
         Iteration = 0  # 迭代计数器
         runtime_start = time.time()  # 运行时间起始点
 
-        # 迭代阀值，当两次迭代损失函数之差小于该阀值时停止迭代
-        epsilon = 4
-        f_lens = 250#-1 / 22  # mm
-        w_slm = 200e-6
-        width_Hologram = 200
-        x = np.arange(-width_Hologram, width_Hologram)
-        y = np.arange(-width_Hologram, width_Hologram)
-        X, Y = np.meshgrid(x, y)  # 2生成绘制3D图形所需的网络数据
-        R = (X ** 2 + Y ** 2) ** 0.5
+        # SA参数设置
+        T_init = 500  # 初始最大温度
+        alpha = 0.75  # 降温系数
+        T_min = 50  # 最小温度，即退出循环条件
+        step = 1400  # 随机扰动步长
+        scale_upper = 10000
+        scale_lower = 0
+        search_depth = 15  # 搜索深度
+        T = T_init  #
+
+        # 写入excel表格
+        workbook = xlwt.Workbook()
+        sheet = workbook.add_sheet("Sheet Name1")
 
         while self.auto_flag == 1:
-            # # time
-            # self.time = time.time()
-            # print('Time cost = %fs' % (time.time() - self.time))
-
             # 窗口实施刷新，后台计算不影响界面刷新
             QtWidgets.QApplication.processEvents()
-            # 迭代次数限制自动退出 及 刷新显示
-            if Iteration > 2:
-                self.End_clicked()
-                break
-            Iteration = Iteration + 1
-            self.Iteration_lineEdit.setText(str(Iteration))
-            # 运行时间计算 及 刷新显示
-            runtime = time.time() - runtime_start
-            hour = int(runtime // 3600)
-            minute = int((runtime - hour * 3600) // 60)
-            sec = int((runtime - hour * 3600 - minute * 60))
-            self.RunTime_lineEdit.setText(str(hour).zfill(2) + ":" + str(minute).zfill(2) + ":" + str(sec).zfill(2))
 
-            # 算法部分 计算 Hologram
-            # f_lens=f_lens/1e3
-            output_phase = np.angle(np.exp(1j / 2 / f_lens * R ** 2)) + np.pi
-            m1 = 0.0205
-            m2 = 2.4219
-            m_phase = np.arange(0, 256) / 255 * (m2 - m1) + m1
-            # m_phase = np.arange(0, 256) / 255 * 2 * np.pi
-            m_grey = np.arange(0, 256)
-            m_bitmap = np.uint8(np.interp(output_phase, m_phase, m_grey))
+            results = []  # 存x，y
+            count = 0
+            x = 500  # 初始位置
+            self.update_flens(x)  # 更新flens全息图
+            y = self.last_aim_value
+            while T > T_min:
+                x_best = x
+                y_best = y  # 设置成这个收敛太快了，令人智熄
+                flag = 0  # 用来标识该温度下是否有新值被接受
+                # 扰动步长递减
+                step = step * T / T_init
+                # 每个温度迭代多次，找最优解
+                for i in range(search_depth):
+                    delta_x = np.random.randn() * step  # 自变量进行扰动
+                    # 自变量变化后仍要求在[0,10]之间
+                    if scale_lower < (x + delta_x) < scale_upper:
+                        x_new = x + delta_x
+                    elif scale_lower < (x - delta_x) < scale_upper:
+                        x_new = x - delta_x
+                    else:
+                        x_new = x
 
-            # 1、更新hologram
-            self.Hologram = m_bitmap
-            # self.Hologram = self.Hologram_Auto_genaration()
-            # 2、更新全息图位置参数和SLM显示器
-            self.SLM_display()
+                    self.update_flens(x_new)  # 更新flens全息图
+                    y_new = self.last_aim_value
+
+                    # 以上为找最大值，要找最小值就把>号变成<
+                    if (y_new >= y or np.exp(-(y - y_new) / T) > np.random.rand()):
+                        flag = 1  # 有新值被接受
+                        x = x_new
+                        y = y_new
+                        if y > y_best:
+                            x_best = x
+                            y_best = y
+
+                    print(str(count)+' '+str(y)+' '+str(y_new))
+                    count = count + 1
+                    # 写入excel表格
+                    Iteration = Iteration + 1
+                    sheet.write(Iteration, 0, str(x))
+                    sheet.write(Iteration, 1, str(y))
+                if flag:
+                    x = x_best
+                    y = y_best
+                T *= alpha  # 温度下降
+            workbook.save('Lens_Value.xls')
+            self.End_clicked()
+
+        #
+        #     # 迭代次数限制自动退出 及 刷新显示
+        #     if Iteration > 3000:
+        #         self.End_clicked()
+        #         break
+        #     Iteration = Iteration + 1
+        #     self.Iteration_lineEdit.setText(str(Iteration))
+        #     # 运行时间计算 及 刷新显示
+        #     runtime = time.time() - runtime_start
+        #     hour = int(runtime // 3600)
+        #     minute = int((runtime - hour * 3600) // 60)
+        #     sec = int((runtime - hour * 3600 - minute * 60))
+        #     self.RunTime_lineEdit.setText(str(hour).zfill(2) + ":" + str(minute).zfill(2) + ":" + str(sec).zfill(2))
+        #
+        #     # 算法部分 计算 Hologram
+        #     f_lens = f_lens + 1
+        #
+        #     output_phase = np.angle(np.exp(1j / f_lens * R ** 2)) + np.pi
+        #     m1 = 0.0205
+        #     m2 = 2.4219
+        #     m_phase = np.arange(0, 256) / 255 * (m2 - m1) + m1
+        #     m_grey = np.arange(0, 256)
+        #     m_bitmap = np.uint8(np.interp(output_phase, m_phase, m_grey))
+        #     # 更新hologram
+        #     self.Hologram = m_bitmap
+        #     # 更新值
+        #     self.update_cam_value()
+        #
+        #     # 写入excel表格
+        #     sheet.write(Iteration, 0, str(f_lens))
+        #     sheet.write(Iteration, 1, str(self.last_aim_value))
+        #
+        #     if self.last_aim_value > self.Max_aim_value:
+        #         self.Max_Hologram = self.Hologram
+        #
+        # workbook.save('Lens_Value.xls')
+
+    def update_flens(self, f_lens):
+        # 图像参数设置
+        # f_lens = 200  # 250#-1 / 22  # mm
+        width_Hologram = 200
+        # 绘图坐标基础
+        X, Y = np.meshgrid(np.arange(-width_Hologram, width_Hologram),
+                           np.arange(-width_Hologram, width_Hologram))  # 2生成绘制3D图形所需的网络数据
+        R = (X ** 2 + Y ** 2) ** 0.5
+
+        output_phase = np.angle(np.exp(1j / f_lens * R ** 2)) + np.pi
+        m1 = 0.0205
+        m2 = 2.4219
+        m_phase = np.arange(0, 256) / 255 * (m2 - m1) + m1
+        m_grey = np.arange(0, 256)
+        m_bitmap = np.uint8(np.interp(output_phase, m_phase, m_grey))
+        # 更新hologram
+        self.Hologram = m_bitmap
+
+        self.update_cam_value()  # 获得最新的值
+
+        # if self.last_aim_value >= 230:
+        #     self.reset_Cam()
+
+    def reset_Cam(self):
+        self.update_cam_value()
+        EX_value = self.Exposure_spinBox.value()
+        # 曝光值的调节左右侧
+        left = 0
+        right = EX_value
+        # 目标值的上下边界
+        upper = 170
+        lower = 120
+        while not (lower <= self.last_aim_value <= upper):
+            if self.last_aim_value > upper:
+                EX_value = (left + EX_value) / 2
+            elif self.last_aim_value < lower:
+                EX_value = (EX_value + right) / 2
+            self.Exposure_horizontalSlider.setValue(EX_value)
+            self.cam_Exposure_setting()
+            self.update_cam_value()
+
+        self.Max_aim_value = self.last_aim_value
+
+    # def update_WF(self):
+
+    def update_cam_value(self):
+        # 调用此函数前必须更新 self.Hologram
+
+        # 2、更新全息图位置参数和SLM显示器
+        self.SLM_display()
+        # 窗口实施刷新，后台计算不影响界面刷新
+        QtWidgets.QApplication.processEvents()
+        # 3、刷新相机，更新相机目标区域的值 self.last_aim_value
+        # self.update_cam_value()
+        for i in range(8):
+            self.Cam_display()
             # 窗口实施刷新，后台计算不影响界面刷新
             QtWidgets.QApplication.processEvents()
-            # 3、刷新相机，更新相机目标区域的值 self.last_aim_value
-            time1 = time.time()
-            for i in range(8):
-                self.Cam_display()
-                # 窗口实施刷新，后台计算不影响界面刷新
-                QtWidgets.QApplication.processEvents()
-            print('Time cost = %fs' % (time.time() - time1))
-
-            f_lens = f_lens / 100
 
     def End_clicked(self):
         self.auto_flag = 0
         self.timer_camera.start(50)  # 开启自动程序计时器ms，顺序刷新取值
+
+    def Save_clicked(self):
+        cv2.imwrite('Max_f.bmp', self.Max_Hologram)
 
     def SLM_position_update(self):
         self.HologramPositionTop = int(self.Top_spinBox.value())
