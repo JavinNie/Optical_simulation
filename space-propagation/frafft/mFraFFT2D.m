@@ -40,6 +40,8 @@ m_phase_f1 =  -k*(xin.^2 + yin.^2)/2/f1;
 m_phase_f2 = -k*(Xout.^2+Yout.^2)/2/f2;
 
 E_in = E_in.*exp(1i*m_phase_f1);
+%GPUº”ÀŸ
+E_in=gpuArray(E_in);
 E_out = fftshift(fft2(E_in, fft_sample, fft_sample)).*exp(1i*(((Xout+Yout)*m_tan/wavelength)*2*pi+m_phase_f2));
 
 end
