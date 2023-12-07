@@ -14,9 +14,10 @@ w_f = (50e-6);%半径
 E_amp = exp(-x_in.^2/w_f^2);
 E_phase = zeros(size(E_amp));
 %% 光学系统参数
-z1=2*0.5;
+%% 等焦不是共轭（z1=z2=2ft）
+z1=0.5;
 fT=0.5;
-z2=2*0.5;
+z2=0.5;
 
 %% colins 
 %建立光学系统的ABCD矩阵
@@ -53,8 +54,8 @@ E_in=E_amp.*exp(1j*E_phase);
 % E_in=E_amp.*exp(1j*(E_phase+E_phase_2));
 
 % %二元光栅调制
-% E_phase_2=floor((angle(exp(1i*0.005*k*x_in))+pi)/pi)*pi;
-% E_in=E_amp.*exp(1j*(E_phase+E_phase_2));
+E_phase_2=floor((angle(exp(1i*0.005*k*x_in))+pi)/pi)*pi;
+E_in=E_amp.*exp(1j*(E_phase+E_phase_2));
 
 % %矩形窗调幅
 % E_amp_2=double(abs(x_in)<40e-6);
@@ -71,7 +72,7 @@ plot(x_in,angle(E_in),'LineWidth',1.5)
 title('E-in-Phase')
 xlabel('x-in')
 
-%% 共轭面情况
+% 共轭面情况
 if B==0   %%% 此时为共轭面 %%%%%%%%
     x_out = x_in*A;
     dxout = mean(abs(diff(x_out)));
@@ -87,7 +88,7 @@ else
     %输出面空间坐标
     x_out=((-fft_sample)/2:1:(fft_sample)/2-1)*dxout;%1/dxin/fft_sample;
     %输出面频域坐标
-    fxout=((-fft_sample)/2:1:(fft_sample)/2-1)*1/dxin/fft_sample;%x_out/B/wavelength;
+    fxout=x_out/B/wavelength;%((-fft_sample)/2:1:(fft_sample)/2-1)*1/dxin/fft_sample;
     
     %% 柯林斯公式衍射计算
     
